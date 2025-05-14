@@ -1,7 +1,10 @@
+require('dotenv').config()
+
 const express = require('express');
 const morgan = require('morgan');
 
 const app = express();
+const People = require('./models/people.js');
 
 
 
@@ -17,88 +20,98 @@ app.use(morgan(':method :url :status :res[content-length] - :response-time ms :r
 
 const PORT = process.env.PORT || 3001;
 
-let persons = [
-    {
-        "id": "1",
-        "name": "Arto Hellas",
-        "number": "040-123456"
-    },
-    {
-        "id": "2",
-        "name": "Ada Lovelace",
-        "number": "39-44-5323523"
-    },
-    {
-        "id": "3",
-        "name": "Dan Abramov",
-        "number": "12-43-234345"
-    },
-    {
-        "id": "4",
-        "name": "Mary Poppendieck",
-        "number": "39-23-6423122"
-    }
-];
-
-// app.get('/', (req, res) => {
-//     res.send('<h1>Hello, world!</h1>')
-// })
-
 app.get('/api/persons', (req, res) => {
-    res.json(persons);
+    People.find({}).then(people => {
+        res.json(people)
+    });
 })
 
-app.get('/api/persons/:id', (req, res) => {
+app.get('/api/persons/:id', (req, res, next) => {
     const id = req.params.id;
-    const person = persons.find(p => p.id === id);
-    if (person) {
-        res.json(person);
-    }
-    else {
-        res.sendStatus(404).end();
-    }
+    People.findById(id)
+        .then(person => {
+            if (person) res.json(person);
+            else res.status(404).end();
+        })
+        .catch(err => next(err));
 })
 
-app.delete('/api/persons/:id', (req, res) => {
+app.delete('/api/persons/:id', (req, res, next) => {
     const id = req.params.id;
-    persons = persons.filter(p => p.id !== id);
-
-    res.sendStatus(204).end();
+    People.findByIdAndDelete(id)
+        .then(p => {
+            if (p) console.log(`deleted ${p.name}`);
+            return res.status(204).end();
+        })
+        .catch(err => next(err));
 })
 
-app.get('/info', (req, res) => {
-    const text = `<p>Phonebook has info for ${persons.length} people</p>
-    <p>${new Date(Date.now()).toString()}</p>`;
-    res.send(text);
+app.get('/info', (req, res, next) => {
+    People.countDocuments()
+        .then(count => {
+            const text = `<p>Phonebook has info for ${count} people</p>
+        <p>${new Date(Date.now()).toString()}</p>`;
+            res.send(text);
+        })
+        .catch(err => next(err));
 })
 
-const generateId = () => {
-    return Math.round(Math.random() * 1000).toString();
-}
-
-app.post('/api/persons', (req, res) => {
+app.post('/api/persons', (req, res, next) => {
     const body = req.body;
     if (!body.name || !body.number) {
         return res.status(400).json({
             error: 'name or number missing'
         });
     }
-    else if (persons.find(p => p.name === body.name)) {
-        return res.status(409).json({
-            error: 'name is already in phonebook'
-        })
-    }
 
-    const person = {
-        id: generateId(),
+    const person = new People({
         name: body.name,
         number: body.number,
+    })
+
+    person.save().then(savedPerson => {
+        res.json(savedPerson);
+    }).catch(err => next(err));
+})
+
+app.put('/api/persons/:id', (req, res, next) => {
+    const { name, number } = req.body;
+
+    People.findById(req.params.id)
+        .then(person => {
+            if (!person) {
+                return res.status(404).end();
+            }
+
+            person.name = name;
+            person.number = number;
+            console.log(`Updating ${person.name} with number ${person.number}`);
+
+            return person
+                .save()
+                .then((updatedPerson) => {
+                    res.json(updatedPerson);
+                })
+                .catch(err => next(err))
+        })
+        .catch(error => next(error))
+
+})
+
+const errorHandler = (error, request, response, next) => {
+
+    if (error.name === 'CastError') {
+        return response.status(400).json({ error: 'malformatted id' })
+    }
+    if (error.name === 'ValidationError') {
+        return response.status(400).json({ error: error.message })
     }
 
-    persons = persons.concat(person);
+    next(error)
+}
 
-    res.json(person);
-})
+// this has to be the last loaded middleware, also all the routes should be registered before this!
+app.use(errorHandler)
 
 app.listen(PORT, () => {
     console.log(`Server running on ${PORT}`);

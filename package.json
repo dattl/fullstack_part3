@@ -11,7 +11,15 @@
   "author": "Dat Le",
   "license": "MIT",
   "dependencies": {
+    "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "mongoose": "^8.13.0",
     "morgan": "^1.10.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.26.0",
+    "@stylistic/eslint-plugin-js": "^4.2.0",
+    "eslint": "^9.26.0",
+    "globals": "^16.1.0"
   }
 }
